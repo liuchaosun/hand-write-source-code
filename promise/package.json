@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "test": "promises-aplus-tests ./promise.js"
+  },
+  "description": "手写实现 promise，需要执行 npm install -g promises-aplus-tests 安装测试工具"
+}

@@ -9,10 +9,110 @@
 //    当获取到的值是一个 promise时，需要根据promise的执行结果的状态来决定进入到下一个新promise的哪个状态
 // 8.规范中要求在获取then中的函数执行结果时，必须是一个异步的过程 【promise A+ 2.2.4】
 // 9.在使用 new 创建promise实例时，执行器内部可能不是同步的执行 resolve 或者 reject，因此需要能够处理异步能力（使用发布订阅模式）
+const { needNewPromise } = require('./error.js');
 
 const PENDING/*****/ = 'PENDING'; // 等待
 const FULFILLED/***/ = 'FULFILLED'; // 成功
 const REJECTED/****/ = 'REJECTED'; // 失败
+
+/**
+ * 构造函数
+ * @param {*} executor
+ */
+function Promise(executor) {
+  // todo 判断是否通过 new 调用
+  this.status = PENDING; // 默认状态
+  this.value = void 0; // 成功的值
+  this.reason = void 0; // 失败的原因
+  this.onResolvedCallbacks = []; // 订阅成功的回调
+  this.onRejectedCallbacks = []; // 订阅失败的回调
+
+  const resolve = (value) => {
+    // 不在 promise A+ 标准中的场景 resolve 的时候返回的可能是一个 promise
+    if (value instanceof Promise) {
+      return value.then(resolve, reject);
+    }
+    if (this.status === PENDING) {
+      this.value = value;
+      this.status = FULFILLED;
+      this.onResolvedCallbacks.forEach((fn) => fn()); // 发布
+    }
+  }
+
+  const reject = (reason) => {
+    if (this.status === PENDING) {
+      this.reason = reason;
+      this.status = REJECTED;
+      this.onRejectedCallbacks.forEach((fn) => fn()); // 发布
+    }
+  }
+
+  try {
+    executor(resolve, reject);
+  } catch (error) {
+    reject(error);
+  }
+}
+
+Promise.prototype.then = function (onFulfilled, onRejected) {
+  // onFulfilled 和 onRejected都是可选的参数
+  onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : v => v; // 【promise A+ 2.2.7.3】
+  onRejected = typeof onRejected === 'function' ? onRejected : err => { throw err }; //【promise A+ 2.2.7.4】
+  // ！！！！每次调用 then 都要返回一个全新的promise给下一个then使用，这样才能够实现链式调用，解决回调地狱问题
+  let promise2 = new Promise((resolve, reject) => {
+    // 成功时调用onFulfilled
+    if (this.status === FULFILLED) {
+      setTimeout(() => {
+        try {
+          let x = onFulfilled(this.value);
+          resolvePromise(promise2, x, resolve, reject);
+        } catch (error) {
+          reject(error);
+        }
+      }, 0);
+    }
+    // 失败时调用onRejected
+    if (this.status === REJECTED) {
+      setTimeout(() => {
+        try {
+          let x = onRejected(this.reason);
+          resolvePromise(promise2, x, resolve, reject);
+        } catch (error) {
+          reject(error);
+        }
+      }, 0);
+    }
+
+    // 执行器是异步时，还是等待状态
+    if (this.status === PENDING) {
+      // 订阅所有的成功回调和失败回调
+      this.onResolvedCallbacks.push(() => {// AOP 切片
+        // todo... 这里可以是一些其他操作代码
+        setTimeout(() => {
+          try {
+            let x = onFulfilled(this.value);
+            resolvePromise(promise2, x, resolve, reject);
+          } catch (error) {
+            reject(error);
+          }
+        }, 0);
+      });
+      this.onRejectedCallbacks.push(() => {// AOP 切片
+        // todo... 这里可以是一些其他操作代码
+        setTimeout(() => {
+          try {
+            let x = onRejected(this.reason);
+            resolvePromise(promise2, x, resolve, reject);
+          } catch (error) {
+            reject(error);
+          }
+        }, 0);
+      });
+    }
+  });
+  return promise2;
+}
+
 /**
  * 1.在编码时有可能返回的promise和new创建的promise指向同一个，这样会导致代码死循环，规范中要求必须不能是同一个 【promise A+ 2.3.1】
  * 2.链式处理数据时需要根据拿到的 x 判断是原始类型值还是对象，如果是对象还要区分是不是又创建了一个 promise,对应上面第7条的内容
@@ -21,9 +121,9 @@ const REJECTED/****/ = 'REJECTED'; // 失败
  * @param {*} resolve
  * @param {*} reject
  */
-const resolvePromise = (promise2, x, resolve, reject) => {
+function resolvePromise(promise2, x, resolve, reject) {
   if (promise2 === x) {
-    return reject(new TypeError('Chaining cycle detected for promise #<Promise>'));
+    return reject(needNewPromise());
   }
 
   // 【promise A+ 2.3.3】
@@ -60,101 +160,6 @@ const resolvePromise = (promise2, x, resolve, reject) => {
     resolve(x);
   }
 }
-
-class Promise {
-  constructor(executor) {
-    this.status = PENDING; // 默认状态
-    this.value = void 0; // 成功的值
-    this.reason = void 0; // 失败的原因
-    this.onResolvedCallbacks = []; // 订阅成功的回调
-    this.onRejectedCallbacks = []; // 订阅失败的回调
-
-    const resolve = (value) => {
-      // 不在 promise A+ 标准中的场景 resolve 的时候返回的可能是一个 promise
-      if (value instanceof Promise) {
-        return value.then(resolve, reject);
-      }
-      if (this.status === PENDING) {
-        this.value = value;
-        this.status = FULFILLED;
-        this.onResolvedCallbacks.forEach((fn) => fn()); // 发布
-      }
-    }
-
-    const reject = (reason) => {
-      if (this.status === PENDING) {
-        this.reason = reason;
-        this.status = REJECTED;
-        this.onRejectedCallbacks.forEach((fn) => fn()); // 发布
-      }
-    }
-
-    try {
-      executor(resolve, reject);
-    } catch (error) {
-      reject(error);
-    }
-  }
-  then(onFulfilled, onRejected) {
-    // onFulfilled 和 onRejected都是可选的参数
-    onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : v => v; // 【promise A+ 2.2.7.3】
-    onRejected = typeof onRejected === 'function' ? onRejected : err => { throw err }; //【promise A+ 2.2.7.4】
-    // ！！！！每次调用 then 都要返回一个全新的promise给下一个then使用，这样才能够实现链式调用，解决回调地狱问题
-    let promise2 = new Promise((resolve, reject) => {
-      // 成功时调用onFulfilled
-      if (this.status === FULFILLED) {
-        setTimeout(() => {
-          try {
-            let x = onFulfilled(this.value);
-            resolvePromise(promise2, x, resolve, reject);
-          } catch (error) {
-            reject(error);
-          }
-        }, 0);
-      }
-      // 失败时调用onRejected
-      if (this.status === REJECTED) {
-        setTimeout(() => {
-          try {
-            let x = onRejected(this.reason);
-            resolvePromise(promise2, x, resolve, reject);
-          } catch (error) {
-            reject(error);
-          }
-        }, 0);
-      }
-
-      // 执行器是异步时，还是等待状态
-      if (this.status === PENDING) {
-        // 订阅所有的成功回调和失败回调
-        this.onResolvedCallbacks.push(() => {// AOP 切片
-          // todo... 这里可以是一些其他操作代码
-          setTimeout(() => {
-            try {
-              let x = onFulfilled(this.value);
-              resolvePromise(promise2, x, resolve, reject);
-            } catch (error) {
-              reject(error);
-            }
-          }, 0);
-        });
-        this.onRejectedCallbacks.push(() => {// AOP 切片
-          // todo... 这里可以是一些其他操作代码
-          setTimeout(() => {
-            try {
-              let x = onRejected(this.reason);
-              resolvePromise(promise2, x, resolve, reject);
-            } catch (error) {
-              reject(error);
-            }
-          }, 0);
-        });
-      }
-    });
-    return promise2;
-  }
-}
-
 
 /**
  * promise A+ 测试测试用函数（标准中没有）

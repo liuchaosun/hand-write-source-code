@@ -11,9 +11,9 @@
 // 9.在使用 new 创建promise实例时，执行器内部可能不是同步的执行 resolve 或者 reject，因此需要能够处理异步能力（使用发布订阅模式）
 const { needNewPromise } = require('./error.js');
 
-const PENDING/*****/ = 'PENDING'; // 等待
-const FULFILLED/***/ = 'FULFILLED'; // 成功
-const REJECTED/****/ = 'REJECTED'; // 失败
+const PENDING /*****/ = 'PENDING'; // 等待
+const FULFILLED /***/ = 'FULFILLED'; // 成功
+const REJECTED /****/ = 'REJECTED'; // 失败
 
 /**
  * 构造函数
@@ -37,7 +37,7 @@ function Promise(executor) {
       this.status = FULFILLED;
       this.onResolvedCallbacks.forEach((fn) => fn()); // 发布
     }
-  }
+  };
 
   const reject = (reason) => {
     if (this.status === PENDING) {
@@ -45,7 +45,7 @@ function Promise(executor) {
       this.status = REJECTED;
       this.onRejectedCallbacks.forEach((fn) => fn()); // 发布
     }
-  }
+  };
 
   try {
     executor(resolve, reject);
@@ -56,8 +56,13 @@ function Promise(executor) {
 
 Promise.prototype.then = function (onFulfilled, onRejected) {
   // onFulfilled 和 onRejected都是可选的参数
-  onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : v => v; // 【promise A+ 2.2.7.3】
-  onRejected = typeof onRejected === 'function' ? onRejected : err => { throw err }; //【promise A+ 2.2.7.4】
+  onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : (v) => v; // 【promise A+ 2.2.7.3】
+  onRejected =
+    typeof onRejected === 'function'
+      ? onRejected
+      : (err) => {
+          throw err;
+        }; //【promise A+ 2.2.7.4】
   // ！！！！每次调用 then 都要返回一个全新的promise给下一个then使用，这样才能够实现链式调用，解决回调地狱问题
   let promise2 = new Promise((resolve, reject) => {
     // 成功时调用onFulfilled
@@ -86,7 +91,8 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
     // 执行器是异步时，还是等待状态
     if (this.status === PENDING) {
       // 订阅所有的成功回调和失败回调
-      this.onResolvedCallbacks.push(() => {// AOP 切片
+      this.onResolvedCallbacks.push(() => {
+        // AOP 切片
         // todo... 这里可以是一些其他操作代码
         setTimeout(() => {
           try {
@@ -97,7 +103,8 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
           }
         }, 0);
       });
-      this.onRejectedCallbacks.push(() => {// AOP 切片
+      this.onRejectedCallbacks.push(() => {
+        // AOP 切片
         // todo... 这里可以是一些其他操作代码
         setTimeout(() => {
           try {
@@ -111,7 +118,7 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
     }
   });
   return promise2;
-}
+};
 
 /**
  * 1.在编码时有可能返回的promise和new创建的promise指向同一个，这样会导致代码死循环，规范中要求必须不能是同一个 【promise A+ 2.3.1】
@@ -137,16 +144,20 @@ function resolvePromise(promise2, x, resolve, reject) {
       // 需要判断then是否是函数
       if (typeof then === 'function') {
         // 是函数则把x作为then的this指向来调用（不再使用x.then来调用，防止有人修改了defineProperty导致异常）【promise A+ 2.3.3.3】
-        then.call(x, y => {
-          if (called) return;
-          called = true;
-          //第一个函数 resolvePromise，可能的结果有两种：普通值y和一个新的promise ==> [[Resolve]](promise, y) 所以需要递归调用【promise A+ 2.3.3.3.1】
-          resolvePromise(promise2, y, resolve, reject);
-        }, r => {
-          if (called) return;
-          called = true;
-          reject(r); // 【promise A+ 2.3.3.3.2】
-        });
+        then.call(
+          x,
+          (y) => {
+            if (called) return;
+            called = true;
+            //第一个函数 resolvePromise，可能的结果有两种：普通值y和一个新的promise ==> [[Resolve]](promise, y) 所以需要递归调用【promise A+ 2.3.3.3.1】
+            resolvePromise(promise2, y, resolve, reject);
+          },
+          (r) => {
+            if (called) return;
+            called = true;
+            reject(r); // 【promise A+ 2.3.3.3.2】
+          }
+        );
       } else {
         // 不是函数直接返回【promise A+ 2.3.3.4】
         resolve(x);
@@ -154,7 +165,7 @@ function resolvePromise(promise2, x, resolve, reject) {
     } catch (error) {
       if (called) return;
       called = true;
-      reject(error)
+      reject(error);
     }
   } else {
     resolve(x);
@@ -178,8 +189,8 @@ Promise.deferred = function () {
   dfd.promise = new Promise((resolve, reject) => {
     dfd.reject = reject;
     dfd.resolve = resolve;
-  })
+  });
   return dfd;
-}
+};
 
 module.exports = Promise;

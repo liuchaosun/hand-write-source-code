@@ -7,6 +7,4 @@ function isType(type) {
   return (x) => Object.prototype.toString.call(x) === `[object ${type}]`;
 }
 
-exports.isFunction = function () {
-  return isType('Function');
-}
+exports.isFunction = isType('Function');

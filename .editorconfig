@@ -1,0 +1,16 @@
+# 编辑器配置--影响编辑器格式，其他代码格式化操作交给 prettier
+# http://editorconfig.org
+
+root = true
+
+[*]
+# Set default charset： 默认字符集
+charset = utf-8
+end_of_line = lf
+# 2 space indentation： 缩进
+indent_size = 2
+indent_style = space
+# Unix-style newlines with a newline ending every file：文末新行
+insert_final_newline = true
+max_line_length = 100
+trim_trailing_whitespace = true
